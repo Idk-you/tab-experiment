@@ -1,0 +1,140 @@
+local ExpTab = Window:Tab("experiment")
+
+local ExpSection = ExpTab:Section("experiments", "Left")
+ExpSection:Toggle({Title = "5x damage bullets", Flag = "FivexDmg", Default = false})
+ExpSection:Toggle({Title = "hit sounds", Flag = "HitSounds", Callback = function(s)
+    BrzS.hitSoundEnabled = s
+    if s then task.spawn(_hookHitSounds) end
+end, Default = false})
+ExpSection:Dropdown({Title = "hit sound", Flag = "HitSoundName", List = {"Default","Rust","Gamesense","Neverlose","Bubble","Ding","Bruh","Windows XP","Discord","TeamFortress","CS 1.6","Toilet","FAAHH"}, Default = "Default", Callback = function(opt)
+    BrzS.hitSoundId = opt
+end})
+ExpSection:Slider({Title = "hit sound volume", Flag = "HitSoundVol", Symbol = "%", Default = 100, Min = 0, Max = 100, Decimals = 1, Callback = function(v)
+    BrzS.hitSoundVolume = v / 100
+end})
+ExpSection:Button({Title = "> test hit sound", Callback = function()
+    _playHitSoundTest()
+end})
+ExpSection:Toggle({Title = "inventory viewer", Flag = "InvViewer", Callback = function(s)
+    _G.EH_invEnabled = s
+    if invGui then invGui.Enabled = s end
+end, Default = false})
+ExpSection:Keybind({Title = "inv viewer key", Flag = "InvViewerKey", Key = Enum.KeyCode.I, StateType = "Toggle", Callback = function(k)
+    _G.EH_invKey = k
+end})
+
+local NotesSection = ExpTab:Section("changelog", "Right")
+NotesSection:Label("v1.3.0 - 2025")
+NotesSection:Label("+ keybind ghost-fire fix (Unknown guard)")
+NotesSection:Label("+ no leaves: trees only (Foliage folder)")
+NotesSection:Label("+ instant aim removed (broken)")
+NotesSection:Label("+ silent aim keybind fixed")
+NotesSection:Label("----")
+NotesSection:Label("v1.3.0")
+NotesSection:Label("+ keybinds: inline next to each toggle")
+NotesSection:Label("+ keybinds: sa / 3p / dropped esp added")
+NotesSection:Label("+ 3p free mode fixed (Follow cam)")
+NotesSection:Label("+ spinflip: RootJoint visual flip")
+NotesSection:Label("+ all defaults off / unbound")
+NotesSection:Label("----")
+NotesSection:Label("v1.2.6")
+NotesSection:Label("+ SA fixed: redirect on shot only")
+NotesSection:Label("+ anti-aim: spinflip mode")
+NotesSection:Label("+ underground: keybind toggle")
+NotesSection:Label("----")
+NotesSection:Label("v1.2.3")
+NotesSection:Label("+ mines detonation button")
+NotesSection:Label("+ no grass rewritten (paid)")
+NotesSection:Label("+ no leaves rewritten")
+NotesSection:Label("+ prediction fix (1.75x)")
+NotesSection:Label("+ removed bannable SA options")
+
+local CFG_FOLDER = "ExchangeHook/Configs"
+local function cfgEnsure()
+    pcall(function()
+        if not isfolder("ExchangeHook")        then makefolder("ExchangeHook")        end
+        if not isfolder(CFG_FOLDER)            then makefolder(CFG_FOLDER)            end
+    end)
+end
+
+local function cfgList()
+    local files = {}
+    pcall(function()
+        cfgEnsure()
+        for _, f in ipairs(listfiles(CFG_FOLDER)) do
+
+            local name = f:gsub(".*/",""):gsub("%.json$","")
+            if name ~= "" then files[#files+1] = name end
+        end
+    end)
+    return files
+end
+
+local function cfgSave(name)
+    if not name or name == "" then return false end
+    name = name:gsub("[^%w%-%_%. ]",""):sub(1,32)
+    if name == "" then return false end
+    cfgEnsure()
+    local snap = {}
+    for k, v in pairs(Library.Flags) do
+        local t = type(v)
+        if t == "boolean" or t == "number" or t == "string" then
+            snap[k] = v
+        end
+    end
+    pcall(function()
+        writefile(CFG_FOLDER .. "/" .. name .. ".json",
+            game:GetService("HttpService"):JSONEncode(snap))
+    end)
+    return true
+end
+
+local function cfgLoad(name)
+    local ok, raw = pcall(function()
+        return readfile(CFG_FOLDER .. "/" .. name .. ".json")
+    end)
+    if not ok or not raw then return false end
+    local ok2, snap = pcall(function()
+        return game:GetService("HttpService"):JSONDecode(raw)
+    end)
+    if not ok2 or not snap then return false end
+
+    if not _G.EH_PAID_EXECUTOR then
+        for _, flag in ipairs(PAID_ONLY_FLAGS) do snap[flag] = false end
+    end
+
+    task.spawn(function()
+        local ORDER = {}
+        for flag, val in pairs(snap) do
+            if type(val) == "boolean" and val == true then
+                ORDER[#ORDER+1] = flag
+            end
+        end
+
+        for flag, val in pairs(snap) do
+            if not (type(val) == "boolean" and val == true) then
+                Library.Flags[flag] = val
+
+                local tog = Library._toggles and Library._toggles[flag]
+                if tog then tog:Set(val) end
+            end
+        end
+
+        for _, flag in ipairs(ORDER) do
+            Library.Flags[flag] = true
+            local tog = Library._toggles and Library._toggles[flag]
+            if tog then
+                task.spawn(function() tog:Set(true) end)
+            end
+            task.wait(0.04)
+        end
+    end)
+    return true
+end
+
+local function cfgDelete(name)
+    pcall(function()
+        local path = CFG_FOLDER .. "/" .. name .. ".json"
+        if isfile(path) then delfile(path) end
+    end)
+end
